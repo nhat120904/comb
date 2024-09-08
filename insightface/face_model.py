@@ -165,7 +165,7 @@ def face_identification(faces, ident_feats):
 def load_identities(rec_model):
     names = []
     feats = []
-    for path in glob.glob("identities/*.PNG"):
+    for path in glob.glob("../insightface/identities/*.PNG"):
         name = ".".join(
             path.replace(os.sep, '/').split('/')[-1].split('.')[:-1]
         )
@@ -259,9 +259,9 @@ def predict(img, det_model, rec_model):
     return faces
 
 
-def recognize_from_image(filename, det_model, rec_model):
+def recognize_from_image(img, det_model, rec_model):
     # prepare input data
-    img = load_image(filename)
+    # img = load_image(filename)
     logger.debug(f'input image shape: {img.shape}')
 
     # load identities
@@ -365,39 +365,32 @@ def recognize_from_video(video, det_model, rec_model):
     
 
 
-def main():
+def main(image_path):
     rec_model = {
         'resnet100': (WEIGHT_REC_R100_PATH, MODEL_REC_R100_PATH),
         'resnet50': (WEIGHT_REC_R50_PATH, MODEL_REC_R50_PATH),
         'resnet34': (WEIGHT_REC_R34_PATH, MODEL_REC_R34_PATH),
         'mobileface': (WEIGHT_REC_MF_PATH, MODEL_REC_MF_PATH),
     }
-    WEIGHT_REC_PATH, MODEL_REC_PATH = rec_model[args.rec_model]
+    WEIGHT_REC_PATH, MODEL_REC_PATH = rec_model['resnet100']
 
     # model files check and download
     logger.info("=== DET model ===")
     check_and_download_models(WEIGHT_DET_PATH, MODEL_DET_PATH, REMOTE_PATH)
     logger.info("=== REC model ===")
     check_and_download_models(WEIGHT_REC_PATH, MODEL_REC_PATH, REMOTE_PATH)
-    logger.info("=== GA model ===")
-    check_and_download_models(WEIGHT_GA_PATH, MODEL_GA_PATH, REMOTE_PATH)
+
 
     # initialize
     det_model = ailia.Net(MODEL_DET_PATH, WEIGHT_DET_PATH, env_id=args.env_id)
     rec_model = ailia.Net(MODEL_REC_PATH, WEIGHT_REC_PATH, env_id=args.env_id)
-    ga_model = ailia.Net(MODEL_GA_PATH, WEIGHT_GA_PATH, env_id=args.env_id)
-    args.benchmark = True
-    if args.video is not None:
-        recognize_from_video(args.video, det_model, rec_model)
-    else:
-        # input image loop
-        for image_path in args.input:
-            # prepare input data
-            logger.info(image_path)
-            result = recognize_from_image(image_path, det_model, rec_model)
-            print("result: ", result)
+
+    img = cv2.imread(image_path)
+    result = recognize_from_image(img, det_model, rec_model)
+    print("result: ", result)
+    
     logger.info('Script finished successfully.')
 
 
 if __name__ == '__main__':
-    main()
+    main('test_chung.jpg')
