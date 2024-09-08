@@ -1,0 +1,20 @@
+name: comb
+
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - setuptools
+  - wheel
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cudatoolkit=11.8
+  - pip:
+    - absl-py
+    - deep-sort-realtime
+    - git+https://github.com/THU-MIG/yolov10.git
