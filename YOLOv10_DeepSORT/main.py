@@ -119,23 +119,23 @@ def process_frame(frame, model, tracker, class_names, colors):
                 continue
         
         detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, class_id])
-        
+   
     tracks = tracker.update_tracks(detections, frame=frame)
     return tracks, detections
 
 def calculate_feature_similarity(feature1, feature2):
     return 1 - cosine(feature1, feature2)
 
-def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model):
+def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition):
     current_time = datetime.datetime.now()
-    names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
+    # names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
     for track in tracks:
         if not track.is_confirmed():
             continue
         
         track_id = track.track_id
         class_id = track.get_det_class()
-        print("track_id: ", track_id)
+        # print("face recognition: ", perform_recognition)
         # Get bounding box
         bbox = track.to_tlbr()
         x1, y1, x2, y2 = map(int, bbox)
@@ -164,12 +164,17 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
             class_counters[class_id] += 1
             class_specific_id = class_counters[class_id]
             print("assign new class_specific_id: ", class_specific_id)
-
-            # Perform face recognition
+            identity_database[class_specific_id] = "Unknown"
+            
+    
+        # Perform face recognition
+        if perform_recognition:
+            print("perform_recognition now is True")
             crop_img = frame[y1:y2, x1:x2]
             identity = recognize_from_image(crop_img, det_model, rec_model)
-            # identity = random.choice(names)
             identity_database[class_specific_id] = identity
+        # else:
+            
         
         # Update the feature database
         feature_database[class_specific_id] = feature
@@ -257,8 +262,10 @@ def main(_argv):
 
 
         # initialize
-        det_model = ailia.Net(MODEL_DET_PATH, WEIGHT_DET_PATH, env_id=5)
-        rec_model = ailia.Net(MODEL_REC_PATH, WEIGHT_REC_PATH, env_id=5)
+        det_model = ailia.Net(MODEL_DET_PATH, WEIGHT_DET_PATH, env_id=ailia.get_gpu_environment_id())
+        rec_model = ailia.Net(MODEL_REC_PATH, WEIGHT_REC_PATH, env_id=ailia.get_gpu_environment_id())
+
+        perform_recognition = False
 
         while True:
             start = datetime.datetime.now()
@@ -266,7 +273,15 @@ def main(_argv):
             if not ret:
                 break
             
-            # Check if 'q' is pressed
+            # Check if 'c' is pressed
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("c"):
+                perform_recognition = True
+                print("Face recognition triggered")
+            elif key == ord("q"):
+                break
+            
+            # Check if 'k' is pressed
             key = cv2.waitKey(1) & 0xFF
             if key == ord("k"):
                 print("Feature Database:")
@@ -274,10 +289,15 @@ def main(_argv):
                     print(f"ID: {class_specific_id}")
                     print(f"Identity: {identity_database[class_specific_id]}")
                     print("---")
+            
             tracks, detections = process_frame(frame, model, tracker, class_names, colors)
-            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model)
-
+            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition)
+            
+            # Reset the flag after processing
+            perform_recognition = False
+            
             end = datetime.datetime.now()
+            
             # logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
             frame_count += 1
             
@@ -286,8 +306,6 @@ def main(_argv):
             
             writer.write(frame)
             cv2.imshow("YOLOv10 Object tracking", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
         
         logger.info("Class counts:")
         for class_id, count in class_counters.items():
