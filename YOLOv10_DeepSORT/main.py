@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Define command line flags
 flags.DEFINE_string("video", "0", "Path to input video or webcam index (0)")
 flags.DEFINE_string("output", "./output/output.mp4", "Path to output video")
-flags.DEFINE_float("conf", 0.70, "Confidence threshold")
+flags.DEFINE_float("conf", 0.60, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
 flags.DEFINE_integer("class_id", 0, "Class ID to track")
 flags.DEFINE_string("result_dir", "./result2", "Path to save cropped images")
@@ -119,12 +119,35 @@ def process_frame(frame, model, tracker, class_names, colors):
                 continue
         
         detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, class_id])
-   
+        
     tracks = tracker.update_tracks(detections, frame=frame)
     return tracks, detections
 
 def calculate_feature_similarity(feature1, feature2):
     return 1 - cosine(feature1, feature2)
+
+def merge_similar_features(feature_database, identity_database, similarity_threshold=0.7):
+    merged_ids = set()
+    for id1, feature1 in feature_database.items():
+        if id1 in merged_ids:
+            continue
+        for id2, feature2 in feature_database.items():
+            if id1 != id2 and id2 not in merged_ids:
+                similarity = calculate_feature_similarity(feature1, feature2)
+                if similarity > similarity_threshold:
+                    # Merge identities
+                    print("merge id1: ", id1, " with id2: ", id2)
+                    merged_identity = identity_database.get(id1, "Unknown")
+                    if merged_identity == "Unknown":
+                        merged_identity = identity_database.get(id2, "Unknown")
+                    identity_database[id1] = merged_identity
+                    identity_database[id2] = merged_identity
+                    print("merged_identity: ", merged_identity)
+                    merged_ids.add(id2)
+    
+    # Remove merged IDs from feature_database
+    for merged_id in merged_ids:
+        del feature_database[merged_id]
 
 def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition):
     current_time = datetime.datetime.now()
@@ -148,7 +171,7 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
         best_match_id = None
         for db_id, db_feature in feature_database.items():
             similarity = calculate_feature_similarity(feature, db_feature)
-            if similarity > max_similarity and similarity > 0.75:  # Adjust threshold as needed
+            if similarity > max_similarity and similarity > 0.7:  # Adjust threshold as needed
                 max_similarity = similarity
                 best_match_id = db_id
         
@@ -175,9 +198,9 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
             identity_database[class_specific_id] = identity
         # else:
             
-        
         # Update the feature database
         feature_database[class_specific_id] = feature
+        
         
         # Update the track_class_mapping
         track_class_mapping[track_id] = class_specific_id
@@ -187,21 +210,21 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
         # Ensure color is in the correct format (BGR)
         color = tuple(map(int, colors[class_id]))
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
         if FLAGS.blur_id is not None and class_id == FLAGS.blur_id:
             if 0 <= x1 < x2 <= frame.shape[1] and 0 <= y1 < y2 <= frame.shape[0]:
                 frame[y1:y2, x1:x2] = cv2.GaussianBlur(frame[y1:y2, x1:x2], (99, 99), 3)
         
         # Save cropped image every 1 minute
-        if (current_time - last_save_time).total_seconds() >= 60:
-            crop_img = frame[y1:y2, x1:x2]
-            if not os.path.exists(FLAGS.result_dir):
-                os.makedirs(FLAGS.result_dir)
-            save_path = os.path.join(FLAGS.result_dir, f"{current_time.strftime('%Y%m%d_%H%M%S')}_id{class_specific_id}.jpg")
-            cv2.imwrite(save_path, crop_img)
-            logger.info(f"Cropped image saved: {save_path}")
-            last_save_time = current_time  # Reset the timer after saving
+        # if (current_time - last_save_time).total_seconds() >= 60:
+        #     crop_img = frame[y1:y2, x1:x2]
+        #     if not os.path.exists(FLAGS.result_dir):
+        #         os.makedirs(FLAGS.result_dir)
+        #     save_path = os.path.join(FLAGS.result_dir, f"{current_time.strftime('%Y%m%d_%H%M%S')}_id{class_specific_id}.jpg")
+        #     cv2.imwrite(save_path, crop_img)
+        #     logger.info(f"Cropped image saved: {save_path}")
+        #     last_save_time = current_time  # Reset the timer after saving
 
     return frame, last_save_time
 
@@ -292,6 +315,12 @@ def main(_argv):
             
             tracks, detections = process_frame(frame, model, tracker, class_names, colors)
             frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition)
+            
+
+            if frame_count % 100 == 0:
+                merge_similar_features(feature_database, identity_database)
+            #     print("feature_database: ", feature_database)
+            #     print("identity_database: ", identity_database)
             
             # Reset the flag after processing
             perform_recognition = False

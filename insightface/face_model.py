@@ -286,13 +286,15 @@ def recognize_from_image(img, det_model, rec_model):
     # Find the face with the highest probability
     if faces:
         highest_prob_face = max(faces, key=lambda face: face.prob)
-        
-        # Get the name for this face
-        if highest_prob_face.category is not None:
-            highest_prob_name = ident_names[highest_prob_face.category]
+        print("hight face prob = ", highest_prob_face.prob)
+        if highest_prob_face.prob > 0.7:
+            # Get the name for this face
+            if highest_prob_face.category is not None:
+                highest_prob_name = ident_names[highest_prob_face.category]
+            else:
+                highest_prob_name = "Unknown"
         else:
             highest_prob_name = "Unknown"
-        
         return highest_prob_name
     else:
         return None
@@ -342,7 +344,7 @@ def recognize_from_video(video, det_model, rec_model):
             break
         if frame_shown and cv2.getWindowProperty('frame', cv2.WND_PROP_VISIBLE) == 0:
             break
-
+                
         faces = predict(frame, det_model, rec_model)
         faces = face_identification(faces, ident_feats)
 
