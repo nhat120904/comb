@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Define command line flags
 flags.DEFINE_string("video", "0", "Path to input video or webcam index (0)")
 flags.DEFINE_string("output", "./output/output.mp4", "Path to output video")
-flags.DEFINE_float("conf", 0.60, "Confidence threshold")
+flags.DEFINE_float("conf", 0.7, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
 flags.DEFINE_integer("class_id", 0, "Class ID to track")
 flags.DEFINE_string("result_dir", "./result2", "Path to save cropped images")
@@ -126,32 +126,8 @@ def process_frame(frame, model, tracker, class_names, colors):
 def calculate_feature_similarity(feature1, feature2):
     return 1 - cosine(feature1, feature2)
 
-def merge_similar_features(feature_database, identity_database, similarity_threshold=0.7):
-    merged_ids = set()
-    for id1, feature1 in feature_database.items():
-        if id1 in merged_ids:
-            continue
-        for id2, feature2 in feature_database.items():
-            if id1 != id2 and id2 not in merged_ids:
-                similarity = calculate_feature_similarity(feature1, feature2)
-                if similarity > similarity_threshold:
-                    # Merge identities
-                    print("merge id1: ", id1, " with id2: ", id2)
-                    merged_identity = identity_database.get(id1, "Unknown")
-                    if merged_identity == "Unknown":
-                        merged_identity = identity_database.get(id2, "Unknown")
-                    identity_database[id1] = merged_identity
-                    identity_database[id2] = merged_identity
-                    print("merged_identity: ", merged_identity)
-                    merged_ids.add(id2)
-    
-    # Remove merged IDs from feature_database
-    for merged_id in merged_ids:
-        del feature_database[merged_id]
-
 def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition):
     current_time = datetime.datetime.now()
-    # names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
     for track in tracks:
         if not track.is_confirmed():
             continue
@@ -184,22 +160,27 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
         else:
             # New person, assign a new ID
             print("New person detected")
-            class_counters[class_id] += 1
-            class_specific_id = class_counters[class_id]
-            print("assign new class_specific_id: ", class_specific_id)
+            class_specific_id = -1
+            # class_counters[class_id] += 1
+            # class_specific_id = class_counters[class_id]
+            # print("assign new class_specific_id: ", class_specific_id)
             identity_database[class_specific_id] = "Unknown"
             
     
         # Perform face recognition
         if perform_recognition:
             print("perform_recognition now is True")
+            class_counters[class_id] += 1
+            class_specific_id = class_counters[class_id]
             crop_img = frame[y1:y2, x1:x2]
             identity = recognize_from_image(crop_img, det_model, rec_model)
             identity_database[class_specific_id] = identity
-        # else:
             
-        # Update the feature database
-        feature_database[class_specific_id] = feature
+             # Update the feature database
+            feature_database[class_specific_id] = feature
+            
+
+        
         
         
         # Update the track_class_mapping
@@ -316,11 +297,6 @@ def main(_argv):
             tracks, detections = process_frame(frame, model, tracker, class_names, colors)
             frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition)
             
-
-            if frame_count % 100 == 0:
-                merge_similar_features(feature_database, identity_database)
-            #     print("feature_database: ", feature_database)
-            #     print("identity_database: ", identity_database)
             
             # Reset the flag after processing
             perform_recognition = False
