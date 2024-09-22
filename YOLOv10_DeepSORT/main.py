@@ -4,7 +4,7 @@ import torch
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import datetime
-import random
+import json
 import numpy as np
 import ailia
 import logging
@@ -25,7 +25,7 @@ flags.DEFINE_string("output", "./output/output.mp4", "Path to output video")
 flags.DEFINE_float("conf", 0.7, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
 flags.DEFINE_integer("class_id", 0, "Class ID to track")
-flags.DEFINE_string("result_dir", "./result2", "Path to save cropped images")
+flags.DEFINE_string("result_dir", "./result", "Path to save cropped images")
 
 FLAGS = flags.FLAGS
 
@@ -43,7 +43,7 @@ def initialize_video_capture(video_input):
     return cap
 
 def initialize_model():
-    model_path = "./weights/yolov10n.pt"
+    model_path = "./weights/yolov10x.pt"
     if not os.path.exists(model_path):
         logger.error(f"Model weights not found at {model_path}")
         raise FileNotFoundError("Model weights file not found")
@@ -61,37 +61,6 @@ def initialize_model():
     logger.info(f"Using {device} as processing device")
     return model
 
-# def initialize_face_recognition_model():
-#     WEIGHT_DET_PATH = 'retinaface_resnet.onnx'
-#     MODEL_DET_PATH = 'retinaface_resnet.onnx.prototxt'
-#     WEIGHT_REC_R100_PATH = 'arcface_r100_v1.onnx'
-#     MODEL_REC_R100_PATH = 'arcface_r100_v1.onnx.prototxt'
-#     WEIGHT_REC_R50_PATH = 'arcface_r50_v1.onnx'
-#     MODEL_REC_R50_PATH = 'arcface_r50_v1.onnx.prototxt'
-#     WEIGHT_REC_R34_PATH = 'arcface_r34_v1.onnx'
-#     MODEL_REC_R34_PATH = 'arcface_r34_v1.onnx.prototxt'
-#     WEIGHT_REC_MF_PATH = 'arcface_mobilefacenet.onnx'
-#     MODEL_REC_MF_PATH = 'arcface_mobilefacenet.onnx.prototxt'
-#     REMOTE_PATH = \
-#         'https://storage.googleapis.com/ailia-models/insightface/'
-
-#     rec_model = {
-#         'resnet100': (WEIGHT_REC_R100_PATH, MODEL_REC_R100_PATH),
-#         'resnet50': (WEIGHT_REC_R50_PATH, MODEL_REC_R50_PATH),
-#         'resnet34': (WEIGHT_REC_R34_PATH, MODEL_REC_R34_PATH),
-#         'mobileface': (WEIGHT_REC_MF_PATH, MODEL_REC_MF_PATH),
-#     }
-#     WEIGHT_REC_PATH, MODEL_REC_PATH = rec_model['resnet100']
-
-#     # model files check and download
-#     logger.info("=== DET model ===")
-#     check_and_download_models(WEIGHT_DET_PATH, MODEL_DET_PATH, REMOTE_PATH)
-#     logger.info("=== REC model ===")
-#     check_and_download_models(WEIGHT_REC_PATH, MODEL_REC_PATH, REMOTE_PATH)
-
-#     # initialize
-#     det_model = ailia.Net(MODEL_DET_PATH, WEIGHT_DET_PATH, env_id=args.env_id)
-#     rec_model = ailia.Net(MODEL_REC_PATH, WEIGHT_REC_PATH, env_id=args.env_id)
 
 def load_class_names():
     classes_path = "./configs/coco.names"
@@ -126,15 +95,15 @@ def process_frame(frame, model, tracker, class_names, colors):
 def calculate_feature_similarity(feature1, feature2):
     return 1 - cosine(feature1, feature2)
 
-def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition):
+def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data):
     current_time = datetime.datetime.now()
+    frame_data = []
     for track in tracks:
         if not track.is_confirmed():
             continue
         
         track_id = track.track_id
         class_id = track.get_det_class()
-        # print("face recognition: ", perform_recognition)
         # Get bounding box
         bbox = track.to_tlbr()
         x1, y1, x2, y2 = map(int, bbox)
@@ -146,66 +115,77 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
         max_similarity = 0
         best_match_id = None
         for db_id, db_feature in feature_database.items():
-            similarity = calculate_feature_similarity(feature, db_feature)
-            if similarity > max_similarity and similarity > 0.7:  # Adjust threshold as needed
-                max_similarity = similarity
-                best_match_id = db_id
+            for ft in db_feature:
+                similarity = calculate_feature_similarity(feature, ft)
+                if similarity > max_similarity and similarity > 0.7:  # Adjust threshold as needed
+                    max_similarity = similarity
+                    best_match_id = db_id
+            
+        # print("track: ", track_id, " ,max similarity: ", max_similarity, "best macth id: ", best_match_id)
         
         if best_match_id is not None:
             # found a match, use the existing ID
             # print("Found a match")
             class_specific_id = best_match_id
-            identity = identity_database.get(class_specific_id, "Unknown")
+            # identity = identity_database.get(class_specific_id, "Unknown")
+            identity = identity_database[class_specific_id]
             # ident_name.append(identity)
         else:
             # New person, assign a new ID
-            print("New person detected")
-            class_specific_id = -1
-            # class_counters[class_id] += 1
-            # class_specific_id = class_counters[class_id]
-            # print("assign new class_specific_id: ", class_specific_id)
-            identity_database[class_specific_id] = "Unknown"
-            
-    
-        # Perform face recognition
-        if perform_recognition:
-            print("perform_recognition now is True")
+            # print("New person detected")
             class_counters[class_id] += 1
             class_specific_id = class_counters[class_id]
+            # class_specific_id += 1
+            # print("assign new class_specific_id: ", class_specific_id)
+            identity_database[class_specific_id] = "Unknown"
+            identity = identity_database[class_specific_id]
+            feature_database[class_specific_id] = []
+            
+        # Perform face recognition
+        if perform_recognition and identity == "Unknown":
+            # print("perform_recognition now is True")
             crop_img = frame[y1:y2, x1:x2]
-            identity = recognize_from_image(crop_img, det_model, rec_model)
-            identity_database[class_specific_id] = identity
-            
-             # Update the feature database
-            feature_database[class_specific_id] = feature
-            
-
-        
+            if crop_img.size > 0:  # Check if the cropped image is not empty
+                identity = recognize_from_image(crop_img, det_model, rec_model)
+                # print("identity: ", identity)
+            else:
+                # print("Skipping face recognition: Empty cropped image")
+                identity = None
+            if identity is not None and identity != "Unknown":
+                # class_counters[class_id] += 1
+                # class_specific_id = class_counters[class_id]
+                identity_database[class_specific_id] = identity
+                # Update the feature database
+                
+        # Update the feature database
+        feature_database[class_specific_id].append(feature)
         
         
         # Update the track_class_mapping
-        track_class_mapping[track_id] = class_specific_id
+        # track_class_mapping[track_id] = class_specific_id
             
         text = f"{class_specific_id} - {identity_database[class_specific_id]}"
         
         # Ensure color is in the correct format (BGR)
         color = tuple(map(int, colors[class_id]))
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         
         if FLAGS.blur_id is not None and class_id == FLAGS.blur_id:
             if 0 <= x1 < x2 <= frame.shape[1] and 0 <= y1 < y2 <= frame.shape[0]:
                 frame[y1:y2, x1:x2] = cv2.GaussianBlur(frame[y1:y2, x1:x2], (99, 99), 3)
+                
+        frame_data.append({
+            "id": best_match_id,
+            "name": identity,
+            "bounding_box": [x1, y1, x2 - x1, y2 - y1]
+        })
         
-        # Save cropped image every 1 minute
-        # if (current_time - last_save_time).total_seconds() >= 60:
-        #     crop_img = frame[y1:y2, x1:x2]
-        #     if not os.path.exists(FLAGS.result_dir):
-        #         os.makedirs(FLAGS.result_dir)
-        #     save_path = os.path.join(FLAGS.result_dir, f"{current_time.strftime('%Y%m%d_%H%M%S')}_id{class_specific_id}.jpg")
-        #     cv2.imwrite(save_path, crop_img)
-        #     logger.info(f"Cropped image saved: {save_path}")
-        #     last_save_time = current_time  # Reset the timer after saving
+    # Append current frame data to all_frame_data
+    all_frame_data.append({
+        "timestamp": current_time.strftime("%H:%M:%S.%f"),
+        "value": frame_data
+    })
 
     return frame, last_save_time
 
@@ -234,6 +214,8 @@ def main(_argv):
         
         feature_database = {}
         identity_database = {}
+        # Initialize a list to hold all frame data for JSON output
+        all_frame_data = []
         
         WEIGHT_DET_PATH = '../insightface/retinaface_resnet.onnx'
         MODEL_DET_PATH = '../insightface/retinaface_resnet.onnx.prototxt'
@@ -295,8 +277,11 @@ def main(_argv):
                     print("---")
             
             tracks, detections = process_frame(frame, model, tracker, class_names, colors)
-            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition)
+            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data)
             
+            time_stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+            save_path = os.path.join(FLAGS.result_dir, f"{time_stamp}.jpg")
+            cv2.imwrite(save_path, frame)
             
             # Reset the flag after processing
             perform_recognition = False
@@ -310,12 +295,16 @@ def main(_argv):
             cv2.putText(frame, fps_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 8)
             
             writer.write(frame)
-            cv2.imshow("YOLOv10 Object tracking", frame)
+            cv2.imshow("YOLOv10 Object tracking", cv2.resize(frame, (480, 800)))
+            
         
         logger.info("Class counts:")
         for class_id, count in class_counters.items():
             logger.info(f"{class_names[class_id]}: {count}")
-    
+
+        with open(os.path.join(FLAGS.result_dir, "all_frames_data.json"), 'w') as json_file:
+                json.dump(all_frame_data, json_file, indent=4)
+
     except Exception as e:
         logger.exception("An error occurred during processing")
     finally:

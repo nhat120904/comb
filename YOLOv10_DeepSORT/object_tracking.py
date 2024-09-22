@@ -1,31 +1,24 @@
 import os
 import cv2
 import torch
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import datetime
-import random
 import numpy as np
-import ailia
 import logging
 from collections import defaultdict
 from absl import app, flags
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from ultralytics import YOLOv10
-# from insightface.insightface import recognize_from_image
-from scipy.spatial.distance import cosine
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Define command line flags
-flags.DEFINE_string("video", "./data/IMG_4147.MOV", "Path to input video or webcam index (0)")
+flags.DEFINE_string("video", "./data/normal.mp4", "Path to input video or webcam index (0)")
 flags.DEFINE_string("output", "./output/output.mp4", "Path to output video")
-flags.DEFINE_float("conf", 0.60, "Confidence threshold")
+flags.DEFINE_float("conf", 0.50, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
-flags.DEFINE_integer("class_id", None, "Class ID to track")
-flags.DEFINE_string("result_dir", "./result2", "Path to save cropped images")
+flags.DEFINE_integer("class_id", 0, "Class ID to track")
 
 FLAGS = flags.FLAGS
 
@@ -43,7 +36,7 @@ def initialize_video_capture(video_input):
     return cap
 
 def initialize_model():
-    model_path = "./weights/yolov10s.pt"
+    model_path = "./weights/yolov10x.pt"
     if not os.path.exists(model_path):
         logger.error(f"Model weights not found at {model_path}")
         raise FileNotFoundError("Model weights file not found")
@@ -56,7 +49,7 @@ def initialize_model():
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    print("device: ", device)
+    
     model.to(device)
     logger.info(f"Using {device} as processing device")
     return model
@@ -87,86 +80,38 @@ def process_frame(frame, model, tracker, class_names, colors):
                 continue
         
         detections.append([[x1, y1, x2 - x1, y2 - y1], confidence, class_id])
-        
+    
     tracks = tracker.update_tracks(detections, frame=frame)
-    return tracks, detections
+    return tracks
 
-def calculate_feature_similarity(feature1, feature2):
-    return 1 - cosine(feature1, feature2)
-
-def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database):
-    current_time = datetime.datetime.now()
-    names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve', 'Frank', 'Grace', 'Hank', 'Ivy', 'Jack']
+def draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping):
     for track in tracks:
         if not track.is_confirmed():
             continue
-        
         track_id = track.track_id
+        ltrb = track.to_ltrb()
         class_id = track.get_det_class()
-        
-        # Get bounding box
-        bbox = track.to_tlbr()
-        x1, y1, x2, y2 = map(int, bbox)
-        
-        # Get the track's feature vector
-        feature = track.get_feature()
-        
-        # Check if this feature matches any in our database
-        max_similarity = 0
-        best_match_id = None
-        for db_id, db_feature in feature_database.items():
-            similarity = calculate_feature_similarity(feature, db_feature)
-            if similarity > max_similarity and similarity > 0.6:  # Adjust threshold as needed
-                max_similarity = similarity
-                best_match_id = db_id
-        
-        if best_match_id is not None:
-            # We found a match, use the existing ID
-            print("Found a match")
-            class_specific_id = best_match_id
-            identity = identity_database.get(class_specific_id, "Unknown")
-            # ident_name.append(identity)
-        else:
-            # New person, assign a new ID
-            print("New person detected")
-            class_counters[class_id] += 1
-            class_specific_id = class_counters[class_id]
-            print("assign new class_specific_id: ", class_specific_id)
+        x1, y1, x2, y2 = map(int, ltrb)
+        color = colors[class_id]
+        B, G, R = map(int, color)
 
-            # Perform face recognition
-            crop_img = frame[y1:y2, x1:x2]
-            # identity = recognize_from_image(crop_img)
-            identity = random.choice(names)
-            identity_database[class_specific_id] = identity
+        # Assign a new class-specific ID if the track_id is seen for the first time
+        if track_id not in track_class_mapping:
+            class_counters[class_id] += 1
+            track_class_mapping[track_id] = class_counters[class_id]
         
-        # Update the feature database
-        feature_database[class_specific_id] = feature
+        class_specific_id = track_class_mapping[track_id]
+        text = f"{class_specific_id} - {class_names[class_id]}"
         
-        # Update the track_class_mapping
-        track_class_mapping[track_id] = class_specific_id
-            
-        text = f"{class_specific_id} - {identity_database[class_specific_id]}"
-        
-        # Ensure color is in the correct format (BGR)
-        color = tuple(map(int, colors[class_id]))
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (B, G, R), 2)
+        cv2.rectangle(frame, (x1 - 1, y1 - 20), (x1 + len(text) * 12, y1), (B, G, R), -1)
         cv2.putText(frame, text, (x1 + 5, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
         if FLAGS.blur_id is not None and class_id == FLAGS.blur_id:
             if 0 <= x1 < x2 <= frame.shape[1] and 0 <= y1 < y2 <= frame.shape[0]:
                 frame[y1:y2, x1:x2] = cv2.GaussianBlur(frame[y1:y2, x1:x2], (99, 99), 3)
-        
-        # Save cropped image every 1 minute
-        if (current_time - last_save_time).total_seconds() >= 60:
-            crop_img = frame[y1:y2, x1:x2]
-            if not os.path.exists(FLAGS.result_dir):
-                os.makedirs(FLAGS.result_dir)
-            save_path = os.path.join(FLAGS.result_dir, f"{current_time.strftime('%Y%m%d_%H%M%S')}_id{class_specific_id}.jpg")
-            cv2.imwrite(save_path, crop_img)
-            logger.info(f"Cropped image saved: {save_path}")
-            last_save_time = current_time  # Reset the timer after saving
-
-    return frame, last_save_time
+    
+    return frame
 
 def main(_argv):
     try:
@@ -189,22 +134,18 @@ def main(_argv):
         class_counters = defaultdict(int)
         track_class_mapping = {}
         frame_count = 0
-        last_save_time = datetime.datetime.now()
         
-        feature_database = {}
-        identity_database = {}
-
         while True:
             start = datetime.datetime.now()
             ret, frame = cap.read()
             if not ret:
                 break
             
-            tracks, detections = process_frame(frame, model, tracker, class_names, colors)
-            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database)
-
+            tracks = process_frame(frame, model, tracker, class_names, colors)
+            frame = draw_tracks(frame, tracks, class_names, colors, class_counters, track_class_mapping)
+            
             end = datetime.datetime.now()
-            # logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
+            logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
             frame_count += 1
             
             fps_text = f"FPS: {1 / (end - start).total_seconds():.2f}"
@@ -225,6 +166,7 @@ def main(_argv):
         cap.release()
         writer.release()
         cv2.destroyAllWindows()
+
 if __name__ == "__main__":
     try:
         app.run(main)
