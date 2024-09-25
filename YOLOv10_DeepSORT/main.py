@@ -5,6 +5,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import datetime
 import json
+import onnx
+import onnxruntime
 import numpy as np
 import ailia
 import logging
@@ -15,6 +17,10 @@ from ultralytics import YOLOv10
 # from insightface.insightface import recognize_from_image
 from scipy.spatial.distance import cosine
 from insightface.face_model import recognize_from_image
+from torchvision import transforms
+from PIL import Image
+import random
+from uniform_checking.uniform_checking import check_uniform
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,7 +32,11 @@ flags.DEFINE_float("conf", 0.7, "Confidence threshold")
 flags.DEFINE_integer("blur_id", None, "Class ID to apply Gaussian Blur")
 flags.DEFINE_integer("class_id", 0, "Class ID to track")
 flags.DEFINE_string("result_dir", "./result", "Path to save cropped images")
-
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
 FLAGS = flags.FLAGS
 
 def initialize_video_capture(video_input):
@@ -72,6 +82,14 @@ def load_class_names():
         class_names = f.read().strip().split("\n")
     return class_names
 
+def preprocess_crop_img(img):
+    img = img[..., ::-1]
+    img = Image.fromarray(img)
+    img.save(f'result2/{random.random()}.jpg')
+    x = transform(img)
+    x = x.unsqueeze(0)
+    return x
+
 def process_frame(frame, model, tracker, class_names, colors):
     results = model(frame, verbose=False)[0]
     detections = []
@@ -95,7 +113,7 @@ def process_frame(frame, model, tracker, class_names, colors):
 def calculate_feature_similarity(feature1, feature2):
     return 1 - cosine(feature1, feature2)
 
-def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data):
+def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data, ori_session, uniform_check):
     current_time = datetime.datetime.now()
     frame_data = []
     for track in tracks:
@@ -160,6 +178,13 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
         # Update the feature database
         feature_database[class_specific_id].append(feature)
         
+        if uniform_check:
+            crop_img = frame[y1:y2, x1:x2]
+            if crop_img.size > 0:
+                label = check_uniform(ori_session, preprocess_crop_img(crop_img))
+                if not label:
+                    with open("uniform_check_log.txt", "a") as log_file:
+                        log_file.write(f"{identity_database[class_specific_id]} not wearing uniform at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         
         # Update the track_class_mapping
         # track_class_mapping[track_id] = class_specific_id
@@ -181,11 +206,15 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
             "bounding_box": [x1, y1, x2 - x1, y2 - y1]
         })
         
-    # Append current frame data to all_frame_data
-    all_frame_data.append({
+    frame_data = {
         "timestamp": current_time.strftime("%H:%M:%S.%f"),
         "value": frame_data
-    })
+    }
+    # with open(f'./result2/{datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")}.json', 'w') as file:
+    #     json.dump(frame_data, file)
+        
+    # Append current frame data to all_frame_data
+    all_frame_data.append(frame_data)
 
     return frame, last_save_time
 
@@ -240,18 +269,13 @@ def main(_argv):
         }
         WEIGHT_REC_PATH, MODEL_REC_PATH = rec_model['resnet100']
 
-        # model files check and download
-        # logger.info("=== DET model ===")
-        # check_and_download_models(WEIGHT_DET_PATH, MODEL_DET_PATH, REMOTE_PATH)
-        # logger.info("=== REC model ===")
-        # check_and_download_models(WEIGHT_REC_PATH, MODEL_REC_PATH, REMOTE_PATH)
-
-
         # initialize
         det_model = ailia.Net(MODEL_DET_PATH, WEIGHT_DET_PATH, env_id=ailia.get_gpu_environment_id())
         rec_model = ailia.Net(MODEL_REC_PATH, WEIGHT_REC_PATH, env_id=ailia.get_gpu_environment_id())
+        ort_session = onnxruntime.InferenceSession("uniform_check_v2.onnx", providers=["CPUExecutionProvider"])
 
         perform_recognition = False
+        uniform_check = False
 
         while True:
             start = datetime.datetime.now()
@@ -259,33 +283,39 @@ def main(_argv):
             if not ret:
                 break
             
-            # Check if 'c' is pressed
+            # Get key press
             key = cv2.waitKey(1) & 0xFF
+
+            # Check key press
             if key == ord("c"):
                 perform_recognition = True
                 print("Face recognition triggered")
+                
             elif key == ord("q"):
-                break
-            
-            # Check if 'k' is pressed
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("k"):
+                break  # Exit the loop to quit the program
+                
+            elif key == ord("k"):
                 print("Feature Database:")
                 for class_specific_id, feature in feature_database.items():
                     print(f"ID: {class_specific_id}")
                     print(f"Identity: {identity_database[class_specific_id]}")
                     print("---")
             
-            tracks, detections = process_frame(frame, model, tracker, class_names, colors)
-            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data)
+            elif key == ord("u"):
+                uniform_check = True
+                print("Uniform checking triggered")
+        
             
-            time_stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            save_path = os.path.join(FLAGS.result_dir, f"{time_stamp}.jpg")
-            cv2.imwrite(save_path, frame)
+            tracks, detections = process_frame(frame, model, tracker, class_names, colors)
+            frame, last_save_time = draw_tracks(frame, tracks, detections, class_names, colors, class_counters, track_class_mapping, last_save_time, feature_database, identity_database, det_model, rec_model, perform_recognition, all_frame_data, ort_session, uniform_check)
+            
+            # time_stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+            # save_path = os.path.join(FLAGS.result_dir, f"{time_stamp}.jpg")
+            # cv2.imwrite(save_path, frame)
             
             # Reset the flag after processing
             perform_recognition = False
-            
+            uniform_check = False
             end = datetime.datetime.now()
             
             # logger.info(f"Time to process frame {frame_count}: {(end - start).total_seconds():.2f} seconds")
