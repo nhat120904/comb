@@ -183,9 +183,13 @@ def draw_tracks(frame, tracks, detections, class_names, colors, class_counters, 
             if crop_img.size > 0:
                 label = check_uniform(ori_session, preprocess_crop_img(crop_img))
                 if not label:
-                    with open("uniform_check_log.txt", "a") as log_file:
-                        log_file.write(f"{identity_database[class_specific_id]} not wearing uniform at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        
+                    uniform_check_log = {
+                        "timestamp": current_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "error": "not wearing uniform",
+                        "identity": identity_database[class_specific_id]
+                    }
+                    with open(os.path.join(FLAGS.result_dir, "errors.json"), 'w') as json_file:
+                        json.dump(uniform_check_log, json_file, indent=4)
         # Update the track_class_mapping
         # track_class_mapping[track_id] = class_specific_id
             
