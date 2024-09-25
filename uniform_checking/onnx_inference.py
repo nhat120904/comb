@@ -35,6 +35,7 @@ model.eval()
 # img = Image.open("./data/positive/20240728_172006_id2.jpg").convert('RGB')
 img = Image.open("./data/negative/53394_f.webp").convert('RGB')
 # x = torch.randn(1, 3, 224, 224, requires_grad=True)
+
 x = transform(img)
 x = x.unsqueeze(0)
 onnx_model = onnx.load("uniform_check.onnx")
