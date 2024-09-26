@@ -1,0 +1,14 @@
+<!-- logs/templates/logs/manager_register.html -->
+{% extends 'logs/base.html' %}
+
+{% block content %}
+<h2>Manager Registration</h2>
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Register</button>
+</form>
+
+<p>Already have an account? <a href="{% url 'manager_login' %}">Login here</a>.</p>
+{% endblock %}

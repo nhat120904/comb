@@ -1,0 +1,9 @@
+<!-- logs/templates/logs/reports.html -->
+
+{% extends "logs/base.html" %}
+
+{% block content %}
+<h2>Download Reports</h2>
+<p>Click the button below to download the error report as a CSV file.</p>
+<a href="{% url 'reports' %}"><button>Download Report</button></a>
+{% endblock %}

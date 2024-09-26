@@ -1,0 +1,24 @@
+<!-- logs/templates/logs/staff_detail.html -->
+
+{% extends "logs/base.html" %}
+
+{% block content %}
+<h2>{{ staff }}</h2>
+<p>Department: {{ staff.department }}</p>
+
+<h3>Error Logs</h3>
+<table>
+    <tr>
+        <th>Error Type</th>
+        <th>Description</th>
+        <th>Timestamp</th>
+    </tr>
+    {% for error in error_logs %}
+    <tr>
+        <td><a href="{% url 'error_detail' error.id %}">{{ error.error_type }}</a></td>
+        <td>{{ error.description|truncatechars:50 }}</td>
+        <td>{{ error.timestamp }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,35 @@
+<!-- logs/templates/logs/dashboard.html -->
+
+{% extends "logs/base.html" %}
+
+{% block content %}
+<h2>Dashboard</h2>
+
+<h3>Recent Errors</h3>
+<table>
+    <tr>
+        <th>Staff</th>
+        <th>Error Type</th>
+        <th>Timestamp</th>
+    </tr>
+    {% for error in recent_errors %}
+    <tr>
+        <td>{{ error.staff }}</td>
+        <td><a href="{% url 'error_detail' error.id %}">{{ error.error_type }}</a></td>
+        <td>{{ error.timestamp }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>Error Statistics</h3>
+<ul>
+    <li>Total Errors: {{ total_errors }}</li>
+</ul>
+
+<h3>Error Types</h3>
+<ul>
+    {% for item in error_counts %}
+    <li>{{ item.error_type }}: {{ item.count }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,21 @@
+<!-- logs/templates/logs/staff_list.html -->
+
+{% extends "logs/base.html" %}
+
+{% block content %}
+<h2>Staff Members</h2>
+<table>
+    <tr>
+        <th>Name</th>
+        <th>Department</th>
+        <th>Error Count</th>
+    </tr>
+    {% for staff in staff_members %}
+    <tr>
+        <td><a href="{% url 'staff_detail' staff.id %}">{{ staff }}</a></td>
+        <td>{{ staff.department }}</td>
+        <td>{{ staff.error_count }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

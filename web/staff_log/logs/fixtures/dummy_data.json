@@ -1,0 +1,228 @@
+[
+    {
+        "model": "auth.user",
+        "pk": 1,
+        "fields": {
+            "username": "user1",
+            "password": "password1",
+            "email": "user1@example.com",
+            "first_name": "Duc",
+            "last_name": "Chung",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "auth.user",
+        "pk": 2,
+        "fields": {
+            "username": "user2",
+            "password": "password2",
+            "email": "user2@example.com",
+            "first_name": "Duc",
+            "last_name": "Anh",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 1,
+        "fields": {
+            "user": 1,
+            "department": "IT"
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 2,
+        "fields": {
+            "user": 2,
+            "department": "HR"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 1,
+        "fields": {
+            "staff": 1,
+            "error_type": "Not Wearing Uniform",
+            "description": "Staff member was not wearing the required uniform.",
+            "timestamp": "2023-10-01T12:00:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 2,
+        "fields": {
+            "staff": 2,
+            "error_type": "One-Handed Interaction",
+            "description": "Staff member used only one hand during a customer interaction.",
+            "timestamp": "2023-10-02T14:30:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 3,
+        "fields": {
+            "staff": 1,
+            "error_type": "Not Wearing Uniform",
+            "description": "Staff member was not wearing the required uniform.",
+            "timestamp": "2023-10-03T09:15:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 4,
+        "fields": {
+            "staff": 2,
+            "error_type": "Not Greeting Customer",
+            "description": "Staff member failed to greet a customer.",
+            "timestamp": "2023-10-04T11:00:00Z"
+        }
+    },
+    {
+        "model": "auth.user",
+        "pk": 3,
+        "fields": {
+            "username": "user3",
+            "password": "password3",
+            "email": "user3@example.com",
+            "first_name": "Huy",
+            "last_name": "Anh",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "auth.user",
+        "pk": 4,
+        "fields": {
+            "username": "user4",
+            "password": "password4",
+            "email": "user4@example.com",
+            "first_name": "Huy",
+            "last_name": "Hoang",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "auth.user",
+        "pk": 5,
+        "fields": {
+            "username": "user5",
+            "password": "password5",
+            "email": "user5@example.com",
+            "first_name": "Duy",
+            "last_name": "Anh",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "auth.user",
+        "pk": 6,
+        "fields": {
+            "username": "user6",
+            "password": "password6",
+            "email": "user6@example.com",
+            "first_name": "Cuong",
+            "last_name": "Nhat",
+            "is_staff": true,
+            "is_active": true
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 3,
+        "fields": {
+            "user": 3,
+            "department": "Sales"
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 4,
+        "fields": {
+            "user": 4,
+            "department": "Support"
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 5,
+        "fields": {
+            "user": 5,
+            "department": "Marketing"
+        }
+    },
+    {
+        "model": "logs.staff",
+        "pk": 6,
+        "fields": {
+            "user": 6,
+            "department": "Operations"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 5,
+        "fields": {
+            "staff": 3,
+            "error_type": "Not Wearing Uniform",
+            "description": "Staff member failed to wear the required uniform.",
+            "timestamp": "2023-10-05T10:00:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 6,
+        "fields": {
+            "staff": 4,
+            "error_type": "Not Open the Door for Customers",
+            "description": "Staff member did not open the door for a customer.",
+            "timestamp": "2023-10-06T09:45:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 7,
+        "fields": {
+            "staff": 5,
+            "error_type": "Do Not Bow to Customers",
+            "description": "Staff member did not bow when greeting a customer.",
+            "timestamp": "2023-10-07T12:30:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 8,
+        "fields": {
+            "staff": 6,
+            "error_type": "One-Handed Interaction",
+            "description": "Staff member used only one hand during a customer interaction.",
+            "timestamp": "2023-10-08T14:15:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 9,
+        "fields": {
+            "staff": 3,
+            "error_type": "Do Not Bow to Customers",
+            "description": "Staff member failed to bow when interacting with a customer.",
+            "timestamp": "2023-10-09T13:00:00Z"
+        }
+    },
+    {
+        "model": "logs.errorlog",
+        "pk": 10,
+        "fields": {
+            "staff": 4,
+            "error_type": "Not Wearing Uniform",
+            "description": "Staff member was not wearing a uniform.",
+            "timestamp": "2023-10-10T11:20:00Z"
+        }
+    }
+]

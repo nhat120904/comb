@@ -1,0 +1,11 @@
+<!-- logs/templates/logs/error_detail.html -->
+
+{% extends "logs/base.html" %}
+
+{% block content %}
+<h2>Error Detail</h2>
+<p><strong>Staff:</strong> {{ error.staff }}</p>
+<p><strong>Error Type:</strong> {{ error.error_type }}</p>
+<p><strong>Description:</strong> {{ error.description }}</p>
+<p><strong>Timestamp:</strong> {{ error.timestamp }}</p>
+{% endblock %}
